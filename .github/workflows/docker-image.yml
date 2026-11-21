@@ -75,6 +75,23 @@ jobs:
           tar -xzf download/leanclr-linux-bundle-*.tar.gz -C bundle
           test -f bundle/leanclr/publish
 
+      - name: Verify the bundle bridge patch
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          dll = Path("bundle/leanclr/managed/GodotSharp.dll")
+          data = dll.read_bytes()
+          if "LEANCLR_BRIDGE_LOOKUP".encode("utf-16-le") not in data:
+              raise SystemExit(
+                  "stale bundle: GodotSharp bridge diagnostics missing; rerun LeanCLR release binaries")
+          profile = json.loads(Path("bundle/leanclr/profile.json").read_text(encoding="utf-8"))
+          print("bundle godotsharp", profile.get("godotsharp_sha256"))
+          print("bundle calli", profile.get("calli_sha256"))
+          PY
+
       - name: Free disk space
         run: |
           set -eux
