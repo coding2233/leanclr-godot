@@ -121,7 +121,11 @@ RUN set -eux; \
  tar -xzf /tmp/emsdk.tar.gz -C /opt/emsdk --strip-components=1; \
  rm /tmp/emsdk.tar.gz; \
  /opt/emsdk/emsdk install releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit; \
- /opt/emsdk/emsdk activate releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit
+ /opt/emsdk/emsdk activate releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit; \
+ node_bin="$(find /opt/emsdk/node -type f -name node -print -quit)"; \
+ test -n "$node_bin"; \
+ ln -sf "$node_bin" /usr/local/bin/node; \
+ node --version
 
 # The official .NET editor is used headless to import projects and generate C#
 # glue. It is never the shipped runtime.
