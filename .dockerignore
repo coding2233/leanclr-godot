@@ -1,0 +1,29 @@
+# The Linux export image build needs the repository build scripts, patches,
+# managed source and the pinned LeanCLR submodule. Everything else stays out.
+*
+!Dockerfile
+!publish
+!dependencies.json
+!tools
+!tools/**
+!managed
+!managed/**
+!native
+!native/**
+!godot_patches
+!godot_patches/**
+!extern
+!extern/leanclr
+!extern/leanclr/**
+
+# Keep build-only and local state out of the context.
+.git
+.github
+build
+extern/godot
+extern/leanclr/.git
+tools/__pycache__
+managed/**/bin
+managed/**/obj
+tools/managed-info/bin
+tools/managed-info/obj

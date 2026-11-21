@@ -28,18 +28,20 @@ namespace GodotTools.Export
             string phase = manifest.GetProperty("phase").GetString()!;
             bool runtimeReady = manifest.GetProperty("runtime_ready").GetBoolean();
             bool validPhase = phase == "M0-export-prototype" && !runtimeReady ||
-                (phase == "M1-windows-demo" || phase == "M3-html5-demo" || phase == "M4-android-demo") && runtimeReady;
+                (phase == "M1-windows-demo" || phase == "M1-linux-demo" || phase == "M3-html5-demo" || phase == "M4-android-demo") && runtimeReady;
             if (!validPhase ||
                 manifest.GetProperty("godot_commit").GetString() != "ed1daf0bf001b61586d9930840f2f1394092c079")
                 throw new InvalidDataException("Invalid LeanCLR export manifest phase or Godot version.");
             string target = manifest.GetProperty("target").GetString()!;
             if (phase == "M1-windows-demo" && target != "native")
                 throw new InvalidDataException("M1 runtime publication is Windows-only.");
+            if (phase == "M1-linux-demo" && target != "linux")
+                throw new InvalidDataException("M1 Linux runtime publication requires a Linux payload.");
             if (phase == "M3-html5-demo" && target != "wasm")
                 throw new InvalidDataException("M3 runtime publication requires a Wasm payload.");
             if (phase == "M4-android-demo" && target != "android")
                 throw new InvalidDataException("M4 runtime publication requires an Android payload.");
-            string expectedOs = target == "native" ? "Windows" : target == "wasm" ? "Web" : target == "android" ? "Android" : "invalid";
+            string expectedOs = target == "native" ? "Windows" : target == "linux" ? "Linux" : target == "wasm" ? "Web" : target == "android" ? "Android" : "invalid";
             if (!string.Equals(GetExportPlatform().GetOsName(), expectedOs, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("M0 payload does not match the export platform.");
 

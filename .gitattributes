@@ -1,1 +1,4 @@
 godot_patches/**/*.patch text eol=lf
+publish text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf

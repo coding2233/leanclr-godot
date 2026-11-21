@@ -64,16 +64,19 @@ leanclr_runtime = os.environ.get("LEANCLR_GODOT_RUNTIME")
 if leanclr_runtime and not env.editor_build:
     env_mono.Append(CPPDEFINES=["LEANCLR_GODOT", "LEANCLR_STATIC"])
     env_mono.Append(CPPPATH=[os.path.join(os.environ["LEANCLR_GODOT_SOURCE"], "src/runtime/public")])
-    if env["platform"] == "windows":
+    if env["platform"] == "windows" and not env.get("use_mingw", False):
         env.Append(LIBS=[env.File(os.path.join(leanclr_runtime, "Release/leanclr-godot-calli.lib")),
                         env.File(os.path.join(leanclr_runtime, "runtime/Release/leanclr.lib"))])
         env.Append(LINKFLAGS=["bcrypt.lib"])
     else:
         env.Append(LIBS=[env.File(os.path.join(leanclr_runtime, "libleanclr-godot-calli.a")),
                         env.File(os.path.join(leanclr_runtime, "runtime/libleanclr.a"))])
+        if env["platform"] == "windows":
+            env.Append(LINKFLAGS=["-lbcrypt"])
 '''
     scsub.write_text(text, encoding='utf-8', newline='\n')
 registry = ROOT / 'build/m1/calli/modules.cpp'
+registry.parent.mkdir(parents=True, exist_ok=True)
 registry.write_text('''// Generated registry; no runtime object layout is consumed by the host.
 #include "metadata/rt_metadata.h"
 extern const leanclr::metadata::RtCalliBridge g_calli_bridges[];
@@ -101,6 +104,7 @@ contract = [lock['godot']['commit'], lock['leanclr']['commit'],
 with registry.open('a', encoding='utf-8') as output:
     output.write('extern "C" const char* leanclr_godot_contract(unsigned index) {\n static const char* values[] = {' +
                  ','.join(json.dumps(value) for value in contract) + '};\n return index < 6 ? values[index] : "";\n}\n')
-    logic_hash = hashlib.sha256((ROOT / 'build/m1/managed/DemoLogic/bin/Release/net10.0/DemoLogic.dll').read_bytes()).hexdigest()
+    logic = ROOT / 'build/m1/managed/DemoLogic/bin/Release/net10.0/DemoLogic.dll'
+    logic_hash = hashlib.sha256(logic.read_bytes()).hexdigest() if logic.is_file() else ''
     output.write('extern "C" const char* leanclr_godot_aot_assembly_sha256() {\n#ifdef LEANCLR_GODOT_GAMEPLAY_AOT\n return "' + logic_hash + '";\n#else\n return "";\n#endif\n}\n')
 print('Prepared M1 backend and', len(fields), 'typed reverse callbacks')
