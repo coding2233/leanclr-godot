@@ -66,7 +66,9 @@ def assemble(args) -> None:
     shutil.copyfile(ROOT / "build/m1/managed/GodotSharp.dll", out / "managed/GodotSharp.dll")
     shutil.copyfile(ROOT / "build/m1/managed/analyzers/Godot.SourceGenerators.dll",
                     out / "managed/analyzers/Godot.SourceGenerators.dll")
-    shutil.copyfile(ROOT / "build/m1/tools/ManagedInfo.dll", out / "managed/ManagedInfo.dll")
+    for path in (ROOT / "build/m1/tools").iterdir():
+        if path.is_file():
+            shutil.copyfile(path, out / "managed" / path.name)
     shutil.copyfile(ROOT / "dependencies.json", out / "dependencies.json")
 
     godot = ROOT / "extern/godot"

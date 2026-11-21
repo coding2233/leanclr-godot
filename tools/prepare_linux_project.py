@@ -121,6 +121,20 @@ def package_references(csproj: Path) -> list[str]:
     return values
 
 
+def managed_info_command(work: Path, managed_info: Path, *arguments: Path | str) -> list[str]:
+    runtimeconfig = work / "ManagedInfo.runtimeconfig.json"
+    if not runtimeconfig.is_file():
+        runtimeconfig.write_text(json.dumps({
+            "runtimeOptions": {
+                "tfm": "net10.0",
+                "framework": {"name": "Microsoft.NETCore.App", "version": "10.0.0"},
+                "rollForward": "LatestMinor",
+            }
+        }, indent=2) + "\n", encoding="utf-8")
+    return ["dotnet", "exec", "--runtimeconfig", str(runtimeconfig), str(managed_info),
+            *map(str, arguments)]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", type=Path, required=True)
@@ -203,7 +217,7 @@ def main() -> int:
     bootstrap = work / "bootstrap"
     bootstrap.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(generic / "Bootstrap.cs", bootstrap / "Bootstrap.cs")
-    scripts = json.loads(run(["dotnet", args.managed_info, "--scripts", game_dll]).stdout)
+    scripts = json.loads(run(managed_info_command(work, args.managed_info, "--scripts", game_dll)).stdout)
     registration = ["namespace LeanClr { public static partial class Bootstrap { static partial void RegisterScripts() {"]
     for script in scripts:
         factory = "null" if script["abstractType"] else "() => new global::" + script["type"] + "()"
@@ -228,7 +242,7 @@ def main() -> int:
         raise RuntimeError("LeanClr.Bootstrap.dll was not produced")
 
     roots = [game_dll, bootstrap_dll, godotsharp, *dep_dlls]
-    closure = json.loads(run(["dotnet", args.managed_info, bcl, *roots]).stdout)
+    closure = json.loads(run(managed_info_command(work, args.managed_info, bcl, *roots)).stdout)
     corelib = next((item for item in closure if item["name"] == "System.Private.CoreLib"), None)
     if corelib is None:
         raise RuntimeError("CoreLib was not resolved")
