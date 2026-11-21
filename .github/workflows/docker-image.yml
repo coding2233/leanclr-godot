@@ -1,16 +1,15 @@
-name: Godot LeanCLR Linux image
+name: Godot LeanCLR image
 
-# Manual-only. Builds the self-contained Linux image, verifies that it can
-# export the bundled sample with the LeanCLR backend, and publishes it to GHCR.
-#
-# Cache strategy:
-#   - BuildKit registry cache is stored in GHCR (mode=max), so unchanged
-#     toolchain and template layers are reused across runs.
-#   - The image is tagged with a content hash. When that tag already exists,
-#     the workflow pulls it and only re-runs the smoke test.
+# Builds the slim runtime image from prebuilt release binaries. The expensive
+# editor/template compilation lives in the "LeanCLR release binaries" workflow.
+
 on:
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: GitHub Release tag containing the prebuilt LeanCLR bundle
+        type: string
+        default: v4.7.2
       push_to_ghcr:
         description: Push the built image to GHCR
         type: boolean
@@ -19,32 +18,27 @@ on:
         description: Rebuild even when the content-hash image already exists
         type: boolean
         default: false
-      ubuntu_mirror:
-        description: Optional Ubuntu archive mirror host (for example mirrors.aliyun.com)
-        type: string
-        default: ""
 
 permissions:
   contents: read
   packages: write
 
 concurrency:
-  group: godot-leanclr-linux-${{ github.ref }}
+  group: godot-leanclr-image-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  image:
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    timeout-minutes: 120
     env:
-      PRIMARY_TAG: v4.7.2-linux
-      CACHE_TAG: buildcache-linux
+      PRIMARY_TAG: v4.7.2
+      CACHE_TAG: buildcache-image
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          submodules: recursive
 
       - name: Resolve the GHCR image name
         id: image
@@ -53,9 +47,22 @@ jobs:
           owner="${GITHUB_REPOSITORY%%/*}"
           echo "name=ghcr.io/${owner,,}/godot-leanclr" >> "${GITHUB_OUTPUT}"
 
-      # The image downloads a full C++ toolchain, .NET, Android SDK/NDK,
-      # Emscripten, the Godot editor and builds the LeanCLR template. Drop the
-      # runner's preinstalled copies so the loaded image fits on disk.
+      - name: Download the prebuilt bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          rm -rf download bundle
+          mkdir -p download
+          gh release download "${TAG}" --dir download
+          cd download
+          sha256sum -c SHA256SUMS
+          cd ..
+          mkdir -p bundle
+          tar -xzf download/leanclr-linux-bundle-*.tar.gz -C bundle
+          test -f bundle/leanclr/publish
+
       - name: Free disk space
         run: |
           set -eux
@@ -84,26 +91,23 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # GITHUB_TOKEN works when this repository allows packages: write.
-          # Add a GHCR_TOKEN secret (repo + write:packages) if the policy blocks it.
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Compute the content revision
         id: revision
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          leanclr_rev="$(git -C extern/leanclr rev-parse HEAD)"
           digest="$(
             {
-              sha256sum Dockerfile .dockerignore publish dependencies.json
-              find tools managed native godot_patches -type f -print0 \
-                | sort -z | xargs -0 sha256sum
-              echo "${leanclr_rev}"
+              sha256sum Dockerfile .dockerignore
+              find bundle -type f -print0 | sort -z | xargs -0 sha256sum
+              echo "${RELEASE_TAG}"
             } | sha256sum | cut -c1-12
           )"
-          echo "tag=v4.7.2-linux-${digest}" >> "${GITHUB_OUTPUT}"
-          echo "leanclr_rev=${leanclr_rev}" >> "${GITHUB_OUTPUT}"
-          echo "Content tag: v4.7.2-linux-${digest}"
+          echo "tag=v4.7.2-${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Content tag: v4.7.2-${digest}"
 
       - name: Check whether the image already exists
         id: exists
@@ -138,7 +142,6 @@ jobs:
             ${{ steps.image.outputs.name }}:${{ steps.revision.outputs.tag }}
             ${{ steps.image.outputs.name }}:${{ env.PRIMARY_TAG }}
           build-args: |
-            UBUNTU_MIRROR=${{ inputs.ubuntu_mirror }}
             IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=registry,ref=${{ steps.image.outputs.name }}:${{ env.CACHE_TAG }}
           cache-to: type=registry,ref=${{ steps.image.outputs.name }}:${{ env.CACHE_TAG }},mode=max
@@ -223,12 +226,14 @@ jobs:
           PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
           PUSHED: ${{ inputs.push_to_ghcr }}
           EXISTED: ${{ steps.exists.outputs.exists }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           {
-            echo "## godot-leanclr Linux image"
+            echo "## godot-leanclr image"
             echo
             echo "- Image: \`${IMAGE}:${PRIMARY_TAG}\`"
             echo "- Content tag: \`${REVISION_TAG}\`"
+            echo "- Release bundle: \`${RELEASE_TAG}\`"
             echo "- Reused existing image: \`${EXISTED}\`"
             echo "- Pushed to GHCR: \`${PUSHED}\`"
             echo
