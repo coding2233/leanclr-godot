@@ -42,22 +42,8 @@ def main() -> int:
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
-
-    # The publication assemblies are separate, but the Godot export plugin and
-    # the CSharpScript bridge still expect the project's development .NET
-    # metadata. Build the original solution before staging so .godot/mono is
-    # available, exactly like opening/building the project in the editor once.
-    built = run([official, "--headless", "--editor", "--path", project,
-                 "--build-solutions", "--quit"],
-                log=work / "editor-build.log", check=False)
-    if built.returncode != 0:
-        print("editor solution build failed; continuing with existing .godot metadata", flush=True)
-
     stage = work / "project"
     shutil.copytree(project, stage, ignore=ignore)
-    mono = project / ".godot/mono"
-    if mono.is_dir():
-        shutil.copytree(mono, stage / ".godot/mono", dirs_exist_ok=True)
 
     imported = run([official, "--headless", "--editor", "--path", stage, "--import"],
                    log=work / "import.log", check=False)
