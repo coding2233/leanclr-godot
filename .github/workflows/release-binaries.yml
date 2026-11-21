@@ -103,6 +103,9 @@ jobs:
         env:
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
         with:
+          # A fork or a repository with read-only workflow permissions needs a
+          # PAT in RELEASE_TOKEN (repo/contents write).
+          github-token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const tag = process.env.RELEASE_TAG;
             const { owner, repo } = context.repo;
@@ -121,6 +124,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TAG }}
           fail_on_unmatched_files: true
