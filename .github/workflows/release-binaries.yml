@@ -8,16 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Release tag to create or update
+        description: Release tag to create (must match the Docker image tag)
         type: string
         default: v4.7.2
-      overwrite:
-        description: Replace assets if the release already exists
-        type: boolean
-        default: true
-  push:
-    branches:
-      - feature/docker
 
 permissions:
   contents: write
@@ -29,14 +22,10 @@ concurrency:
 
 jobs:
   bundle:
-    # workflow_dispatch is only indexed from the default branch. On a feature
-    # branch, push an empty commit whose message contains [release] to run it.
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 480
     env:
-      RELEASE_TAG: ${{ inputs.release_tag || 'v4.7.2' }}
-      OVERWRITE: ${{ github.event_name == 'push' || inputs.overwrite }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
@@ -114,16 +103,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            if [ "${OVERWRITE}" = "true" ]; then
-              gh release upload "${RELEASE_TAG}" dist/* --clobber
-            else
-              echo "release ${RELEASE_TAG} already exists; assets left unchanged" >&2
-              exit 1
-            fi
-          else
-            gh release create "${RELEASE_TAG}" dist/* --target "${GITHUB_SHA}" \
-              --title "LeanCLR Godot ${RELEASE_TAG}" \
-              --notes "Prebuilt LeanCLR editor and export templates for the slim godot-leanclr runtime image."
-          fi
+          gh release delete "${RELEASE_TAG}" --yes --cleanup-tag || true
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
+          gh release create "${RELEASE_TAG}" dist/* \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE_TAG}" \
+            --notes "Prebuilt LeanCLR editor and export templates for the slim godot-leanclr runtime image."
           gh release view "${RELEASE_TAG}"
