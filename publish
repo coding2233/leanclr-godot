@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
       echo "exporter ${exporter}"
       echo "template ${LEANCLR_ROOT}/templates/linux/linux_release.x86_64"
       if [[ -f "${LEANCLR_ROOT}/profile.json" ]]; then
-        python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); print("profile", p.get("godot_commit","?"), p.get("leanclr_commit","?"), "corelib", p.get("corelib_version","?"))' "${LEANCLR_ROOT}/profile.json"
+        python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); print("profile", p.get("godot_commit","?"), p.get("leanclr_commit","?"), "corelib", p.get("corelib_version","?"), "godotsharp", p.get("godotsharp_sha256","?"), "calli", p.get("calli_sha256","?"))' "${LEANCLR_ROOT}/profile.json"
       fi
       exit 0
       ;;

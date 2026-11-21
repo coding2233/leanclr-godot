@@ -133,6 +133,11 @@ namespace Godot.Bridge {
         "ReadWriteLock.ExitWriteLock();",
     ):
         bridge_text = bridge_text.replace("_scriptTypeBiMap." + lock_call, "")
+    for marker in ("LEANCLR_BRIDGE_LOOKUP", "LEANCLR_BRIDGE_CREATE", "LEANCLR_BRIDGE_RELOADED"):
+        if marker not in bridge_text:
+            raise RuntimeError(f"script bridge patch did not apply: {marker}")
+    if "_scriptTypeBiMap.ReadWriteLock" in bridge_text:
+        raise RuntimeError("script bridge lock removal did not apply")
     script_bridge.write_text(bridge_text, encoding="utf-8")
 
     disposables = stage / "Core/DisposablesTracker.cs"
