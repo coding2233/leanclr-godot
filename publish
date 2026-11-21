@@ -14,7 +14,7 @@ export DOTNET_ROOT=/usr/lib/dotnet
 export ANDROID_HOME=/opt/android-sdk
 export ANDROID_SDK_ROOT=/opt/android-sdk
 export NUGET_PACKAGES="${NUGET_PACKAGES:-/cache/nuget}"
-export PATH="/opt/leanclr:/usr/local/bin:/opt/godot:${DOTNET_ROOT}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+export PATH="/opt/leanclr:/usr/local/bin:${DOTNET_ROOT}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
 
 LEANCLR_ROOT=/opt/leanclr
 PROJECT="${PROJECT:-/src}"
@@ -25,10 +25,9 @@ TARGETS="linux"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ready)
-      godot_bin="$(find /opt/godot -maxdepth 1 -type f -name 'Godot_v*_mono_linux.x86_64' -print -quit)"
       exporter="$(find "${LEANCLR_ROOT}/exporter" -maxdepth 1 -type f -name '*leanclr_m0*' -print -quit)"
       echo "godot-leanclr Linux image"
-      echo "godot $("${godot_bin}" --headless --version)"
+      echo "godot $("${exporter}" --headless --version)"
       echo "dotnet $(dotnet --version)"
       echo "exporter ${exporter}"
       echo "template ${LEANCLR_ROOT}/templates/linux/linux_release.x86_64"
@@ -72,12 +71,11 @@ if [[ $# -gt 0 ]]; then
 fi
 
 mkdir -p "${WORK}" "${OUTPUT}"
-BCL=/opt/dotnet/packs/win-x64/runtimes/win-x64/lib/net10.0
+BCL=/opt/leanclr/bcl/win-x64
 TEMPLATE="${LEANCLR_ROOT}/templates/linux/linux_release.x86_64"
 EXPORTER="$(find "${LEANCLR_ROOT}/exporter" -maxdepth 1 -type f -name '*leanclr_m0*' -print -quit)"
-GODOT_BIN="$(find /opt/godot -maxdepth 1 -type f -name 'Godot_v*_mono_linux.x86_64' -print -quit)"
-if [[ -z "${EXPORTER}" || -z "${GODOT_BIN}" ]]; then
-  echo "image is missing the private exporter or the official editor" >&2
+if [[ -z "${EXPORTER}" ]]; then
+  echo "image is missing the private exporter" >&2
   exit 1
 fi
 
@@ -98,7 +96,7 @@ python3 "${LEANCLR_ROOT}/tools/export_linux_project.py" \
   --payload "${WORK}/payload" \
   --template "${TEMPLATE}" \
   --exporter "${EXPORTER}" \
-  --official-editor "${GODOT_BIN}" \
+  --official-editor "${EXPORTER}" \
   --output "${OUTPUT}"
 
 echo "LEANCLR_LINUX_PUBLISHED ${OUTPUT}"

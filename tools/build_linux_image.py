@@ -46,6 +46,12 @@ def assemble(args) -> None:
     (out / "exporter").mkdir(parents=True)
     (out / "managed/analyzers").mkdir(parents=True)
     (out / "licenses").mkdir(parents=True)
+    (out / "bcl").mkdir(parents=True)
+
+    bcl_source = Path("/opt/dotnet/packs/win-x64/runtimes/win-x64/lib/net10.0")
+    if not (bcl_source / "System.Private.CoreLib.dll").is_file():
+        raise FileNotFoundError(f"managed BCL is missing: {bcl_source}")
+    shutil.copytree(bcl_source, out / "bcl/win-x64")
 
     shutil.copyfile(ROOT / "build/m1/templates/linux/linux_release.x86_64",
                     out / "templates/linux/linux_release.x86_64")
@@ -83,6 +89,16 @@ def assemble(args) -> None:
         raise FileNotFoundError("private exporter is missing from the image artifacts")
     profile["exporter"] = "exporter/" + exporter.name
     profile["template"] = "templates/linux/linux_release.x86_64"
+    profile["targets"] = {
+        "linux": {
+            "template": "templates/linux/linux_release.x86_64",
+            "bcl": "bcl/win-x64",
+            "phase": "M1-linux-demo",
+            "manifest_target": "linux",
+            "pointer_bits": 64,
+            "real_bits": 32,
+        },
+    }
     write_json(out / "profile.json", profile)
     print("LEANCLR_LINUX_IMAGE_OK", out)
 

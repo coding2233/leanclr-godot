@@ -1,6 +1,10 @@
 # Linux 镜像多平台打包方案
 
-> 当前实现范围已调整为 Linux 专用自包含镜像 `godot-leanclr:v4.7.2-linux`：镜像内预编译 LeanCLR Linux 导出模板和私有导出器，挂载项目后直接导出 Linux 包。Windows、WebGL、Android 仍按本文后续阶段拆分镜像实现。
+> 当前实现拆成两条流水线：
+> 1. `release-binaries.yml`：低频构建私有 Godot 编辑器、LeanCLR 导出模板和通用托管资产，上传 GitHub Release。
+> 2. `docker-image.yml`：下载并校验 Release 资产，构建 slim 运行时镜像 `godot-leanclr:v4.7.2`，不再在镜像里编译模板。
+>
+> 当前 bundle 已先接入 Linux 目标；Windows、WebGL、Android 目标按同一结构扩展。
 
 日期：2026-11-19。项目：[focus-creative-games/leanclr-godot](https://github.com/focus-creative-games/leanclr-godot)。
 
@@ -177,28 +181,34 @@ LeanCLR 静态库用同一套编译器：`x86_64-w64-mingw32-gcc` 与 `x86_64-w6
 ```
 
 ```bash
-docker build -t godot-leanclr:v4.7.2-linux .
+# 下载对应的 GitHub Release 二进制 bundle
+mkdir -p download bundle
+gh release download v4.7.2 --dir download
+(cd download && sha256sum -c SHA256SUMS)
+tar -xzf download/leanclr-linux-bundle-v4.7.2.tar.gz -C bundle
+
+docker build -t godot-leanclr:v4.7.2 .
 
 docker run --rm \
   -v "$PWD":/src \
   -v leanclr-cache:/cache \
   -e NUGET_PACKAGES=/cache/nuget \
-  godot-leanclr:v4.7.2-linux \
+  godot-leanclr:v4.7.2 \
   --targets linux \
   --output /src/out
 ```
 
 只打其中一个目标时把 `--targets` 改成 `linux`、`windows`、`web` 或 `android`。输出目录由入口创建；同一路径已有结果时拒绝覆盖，调用方换一个新的 `--output`。
 
-给 `/cache` 预留不少于 50 GB。导出器和四套模板的对象文件都在这个卷里。第一次下载源码并编译以小时计。工具链本身已经在镜像里，后续打包不再下载 NDK、Emscripten 和 MinGW-w64。
+slim 镜像只包含编辑器、模板、通用托管资产、.NET SDK 和运行库，不包含 GCC、CMake、Ninja、SCons、MinGW、Emscripten、NDK 或 Godot 源码。需要重建模板或 AOT 时使用单独的 builder 镜像/bundle 流水线。
 
 ## GitHub Actions 缓存
 
 镜像构建和项目导出都利用缓存：
 
-- 模板/镜像构建使用 GHCR registry cache：`type=registry,ref=<image>:buildcache-linux,mode=max`。
-- 镜像按内容哈希打标签 `v4.7.2-linux-<hash>`；标签已存在时跳过重建，只做冒烟测试。
-- Dockerfile 拆成 `toolchain`、`leanclr-linux`（`prepare`/`linux`）和 `final` 层，修改 `publish` 或 `Bootstrap.cs` 只重建最终小层；修改 `native` 只重建 Linux 模板层。
+- 二进制 bundle 构建使用 GHCR registry cache：`type=registry,ref=<image>:buildcache-bundle,mode=max`。
+- slim 镜像构建使用 `type=registry,ref=<image>:buildcache-image,mode=max`，并按内容哈希打标签 `v4.7.2-<hash>`；标签已存在时跳过重建，只做冒烟测试。
+- `Dockerfile.builder` 的 `toolchain`、`leanclr-linux`（`prepare`/`linux`）层只在源码或 patch 变化时重编；Release 资产不可变，slim 镜像只重新打包资产。
 - 项目导出时 `/cache/nuget` 可挂载持久化，避免重复还原 NuGet 包。
 
 ## 验收

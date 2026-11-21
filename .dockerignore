@@ -15,11 +15,16 @@
 !extern
 !extern/leanclr
 !extern/leanclr/**
+!bundle
+!bundle/**
 
 # Keep build-only and local state out of the context.
 .git
 .github
 build
+bundle-out
+dist
+download
 extern/godot
 extern/leanclr/.git
 tools/__pycache__

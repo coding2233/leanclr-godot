@@ -62,7 +62,7 @@ def collect_sources(project: Path, destination: Path) -> int:
 
 def build_references(csproj: Path, work: Path) -> list[Path]:
     outputs = []
-    local_nupkgs = "/opt/godot/GodotSharp/Tools/nupkgs"
+    local_nupkgs = "/opt/leanclr/exporter/GodotSharp/Tools/nupkgs"
     for index, item in enumerate(project_items(csproj, "ProjectReference")):
         reference = (csproj.parent / item["include"].replace("\\", "/")).resolve()
         if not reference.is_file():
@@ -127,7 +127,7 @@ def main() -> int:
         shutil.rmtree(work)
     work.mkdir(parents=True)
     restore_property = {
-        "RestoreAdditionalProjectSources": "/opt/godot/GodotSharp/Tools/nupkgs",
+        "RestoreAdditionalProjectSources": "/opt/leanclr/exporter/GodotSharp/Tools/nupkgs",
     }
     game = work / "game"
     game.mkdir(parents=True)
