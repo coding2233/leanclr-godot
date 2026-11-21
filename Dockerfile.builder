@@ -49,6 +49,7 @@ RUN set -eux; \
    file \
    git \
    ninja-build \
+   nodejs \
    pkg-config \
    python-is-python3 \
    python3 \
@@ -122,9 +123,10 @@ RUN set -eux; \
  rm /tmp/emsdk.tar.gz; \
  /opt/emsdk/emsdk install releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit; \
  /opt/emsdk/emsdk activate releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit; \
- node_bin="$(find /opt/emsdk/node -type f -name node -print -quit)"; \
- test -n "$node_bin"; \
- ln -sf "$node_bin" /usr/local/bin/node; \
+ /opt/emsdk/emsdk install node-20.18.0-64bit; \
+ /opt/emsdk/emsdk activate node-20.18.0-64bit; \
+ node_bin="$(find /opt/emsdk/node -type f -name node -print -quit 2>/dev/null || true)"; \
+ if [ -n "$node_bin" ]; then ln -sf "$node_bin" /usr/local/bin/node; fi; \
  node --version
 
 # The official .NET editor is used headless to import projects and generate C#
