@@ -111,8 +111,8 @@ jobs:
           set -euo pipefail
           digest="$(
             {
-              sha256sum Dockerfile .dockerignore
-              find bundle -type f -print0 | sort -z | xargs -0 sha256sum
+              sha256sum Dockerfile .dockerignore publish managed/m1/Bootstrap.cs
+              find tools bundle -type f -print0 | sort -z | xargs -0 sha256sum
               echo "${RELEASE_TAG}"
             } | sha256sum | cut -c1-12
           )"

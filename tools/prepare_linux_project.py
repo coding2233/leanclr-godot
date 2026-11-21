@@ -60,6 +60,23 @@ def collect_sources(project: Path, destination: Path) -> int:
     return count
 
 
+def retarget_reference(reference: Path, destination: Path) -> Path:
+    source = destination / "source"
+    shutil.copytree(reference.parent, source, ignore=shutil.ignore_patterns(
+        ".git", ".godot", "bin", "obj", ".vs", "__pycache__"))
+    project = source / reference.name
+    text = project.read_text(encoding="utf-8")
+    text = re.sub(r"<TargetFramework>[^<]*</TargetFramework>",
+                  "<TargetFramework>net10.0</TargetFramework>", text, count=1)
+    text = re.sub(r"<TargetFrameworks>[^<]*</TargetFrameworks>",
+                  "<TargetFramework>net10.0</TargetFramework>", text, count=1)
+    if "<TargetFramework>" not in text:
+        text = text.replace("<PropertyGroup>",
+                            "<PropertyGroup><TargetFramework>net10.0</TargetFramework>", 1)
+    project.write_text(text, encoding="utf-8")
+    return project
+
+
 def build_references(csproj: Path, work: Path) -> list[Path]:
     outputs = []
     local_nupkgs = "/opt/leanclr/exporter/GodotSharp/Tools/nupkgs"
@@ -71,9 +88,19 @@ def build_references(csproj: Path, work: Path) -> list[Path]:
         if destination.exists():
             shutil.rmtree(destination)
         destination.mkdir(parents=True)
-        dotnet_build(reference, output=destination, log=work / f"reference-{reference.stem}.log",
-                     properties={"TargetFramework": "net10.0",
-                                 "RestoreAdditionalProjectSources": local_nupkgs})
+        try:
+            # Retarget a copy so the project's own assets file is never forced
+            # to a target framework it was not restored for.
+            copied = retarget_reference(reference, destination)
+            dotnet_build(copied, output=destination,
+                         log=work / f"reference-{reference.stem}.log",
+                         properties={"RestoreAdditionalProjectSources": local_nupkgs})
+        except RuntimeError:
+            shutil.rmtree(destination)
+            destination.mkdir(parents=True)
+            dotnet_build(reference, output=destination,
+                         log=work / f"reference-{reference.stem}-original.log",
+                         properties={"RestoreAdditionalProjectSources": local_nupkgs})
         outputs.extend(sorted(destination.glob("*.dll")))
     return outputs
 

@@ -78,6 +78,11 @@ RUN set -eux; \
 RUN mkdir -p /cache/nuget /src
 
 COPY bundle/leanclr /opt/leanclr
+# The image runs the publisher from the current checkout so small tool fixes do
+# not require rebuilding the expensive binary bundle.
+COPY --chmod=755 publish /opt/leanclr/publish
+COPY tools /opt/leanclr/tools
+COPY managed/m1/Bootstrap.cs /opt/leanclr/managed/Bootstrap.cs
 
 RUN set -eux; \
  bash -n /opt/leanclr/publish; \
