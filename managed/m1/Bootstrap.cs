@@ -1,4 +1,7 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using Godot.Bridge;
 using Godot.NativeInterop;
 
@@ -26,6 +29,7 @@ namespace LeanClr
                 AlcReloadCfg.Configure(false);
                 Console.WriteLine("LEANCLR_ATTACH script-registration");
                 RegisterScripts();
+                LogScriptBridgeState();
                 Console.WriteLine("LEANCLR_ATTACH ready");
             }
             catch (Exception exception)
@@ -33,6 +37,30 @@ namespace LeanClr
                 Console.WriteLine("LEANCLR_ATTACH_ERROR " + exception.GetType().FullName + ": " + exception.Message);
                 Console.WriteLine(exception.StackTrace);
                 throw;
+            }
+        }
+
+        private static void LogScriptBridgeState()
+        {
+            try
+            {
+                const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
+                object map = typeof(ScriptManagerBridge).GetField("_pathTypeBiMap", Flags)?.GetValue(null);
+                object pathsValue = map?.GetType().GetProperty("Paths")?.GetValue(map);
+                var paths = new List<string>();
+                if (pathsValue is IEnumerable enumerable)
+                {
+                    foreach (object path in enumerable)
+                        paths.Add(path?.ToString() ?? "");
+                }
+                Console.WriteLine("LEANCLR_BRIDGE_PATHS " + string.Join("|", paths));
+
+                object factories = typeof(ScriptManagerBridge).GetField("_publishedFactories", Flags)?.GetValue(null);
+                Console.WriteLine("LEANCLR_BRIDGE_FACTORIES " + ((factories as IDictionary)?.Count ?? -1));
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine("LEANCLR_BRIDGE_STATE_ERROR " + exception.GetType().FullName + ": " + exception.Message);
             }
         }
         static partial void RegisterScripts();

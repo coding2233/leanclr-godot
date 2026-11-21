@@ -182,7 +182,7 @@ jobs:
             --output /src/build/docker-linux
           test -f build/docker-linux/leanclr-game.x86_64
           cd build/docker-linux
-          timeout 180 ./leanclr-game.x86_64 --headless -- --m0-smoke 2>&1 | tee smoke.log
+          timeout 180 ./leanclr-game.x86_64 --headless -- --m0-smoke 2>&1 | sudo tee smoke.log
           grep -q 'NODE2D_SMOKE_OK' smoke.log
           grep -q 'LEANCLR_ATTACH ready' smoke.log
 
