@@ -1,0 +1,238 @@
+name: Godot LeanCLR Linux image
+
+# Manual-only. Builds the self-contained Linux image, verifies that it can
+# export the bundled sample with the LeanCLR backend, and publishes it to GHCR.
+#
+# Cache strategy:
+#   - BuildKit registry cache is stored in GHCR (mode=max), so unchanged
+#     toolchain and template layers are reused across runs.
+#   - The image is tagged with a content hash. When that tag already exists,
+#     the workflow pulls it and only re-runs the smoke test.
+on:
+  workflow_dispatch:
+    inputs:
+      push_to_ghcr:
+        description: Push the built image to GHCR
+        type: boolean
+        default: true
+      force_rebuild:
+        description: Rebuild even when the content-hash image already exists
+        type: boolean
+        default: false
+      ubuntu_mirror:
+        description: Optional Ubuntu archive mirror host (for example mirrors.aliyun.com)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: godot-leanclr-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      PRIMARY_TAG: v4.7.2-linux
+      CACHE_TAG: buildcache-linux
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Resolve the GHCR image name
+        id: image
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          echo "name=ghcr.io/${owner,,}/godot-leanclr" >> "${GITHUB_OUTPUT}"
+
+      # The image downloads a full C++ toolchain, .NET, Android SDK/NDK,
+      # Emscripten, the Godot editor and builds the LeanCLR template. Drop the
+      # runner's preinstalled copies so the loaded image fits on disk.
+      - name: Free disk space
+        run: |
+          set -eux
+          df -h /
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost \
+            /usr/local/.ghcup \
+            /usr/local/lib/node_modules \
+            /opt/az \
+            /opt/microsoft \
+            /opt/pipx
+          sudo apt-get clean
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # GITHUB_TOKEN works when this repository allows packages: write.
+          # Add a GHCR_TOKEN secret (repo + write:packages) if the policy blocks it.
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Compute the content revision
+        id: revision
+        run: |
+          set -euo pipefail
+          leanclr_rev="$(git -C extern/leanclr rev-parse HEAD)"
+          digest="$(
+            {
+              sha256sum Dockerfile .dockerignore publish dependencies.json
+              find tools managed native godot_patches -type f -print0 \
+                | sort -z | xargs -0 sha256sum
+              echo "${leanclr_rev}"
+            } | sha256sum | cut -c1-12
+          )"
+          echo "tag=v4.7.2-linux-${digest}" >> "${GITHUB_OUTPUT}"
+          echo "leanclr_rev=${leanclr_rev}" >> "${GITHUB_OUTPUT}"
+          echo "Content tag: v4.7.2-linux-${digest}"
+
+      - name: Check whether the image already exists
+        id: exists
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          REVISION_TAG: ${{ steps.revision.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "${IMAGE}:${REVISION_TAG}" >/dev/null 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Pull the existing image
+        if: ${{ steps.exists.outputs.exists == 'true' && !inputs.force_rebuild }}
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          REVISION_TAG: ${{ steps.revision.outputs.tag }}
+        run: docker pull "${IMAGE}:${REVISION_TAG}"
+
+      - name: Build image
+        if: ${{ steps.exists.outputs.exists != 'true' || inputs.force_rebuild }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.revision.outputs.tag }}
+            ${{ steps.image.outputs.name }}:${{ env.PRIMARY_TAG }}
+          build-args: |
+            UBUNTU_MIRROR=${{ inputs.ubuntu_mirror }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=registry,ref=${{ steps.image.outputs.name }}:${{ env.CACHE_TAG }}
+          cache-to: type=registry,ref=${{ steps.image.outputs.name }}:${{ env.CACHE_TAG }},mode=max
+
+      - name: Smoke-test the image entrypoint
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          REVISION_TAG: ${{ steps.revision.outputs.tag }}
+        run: |
+          set -euo pipefail
+          image="${IMAGE}:${REVISION_TAG}"
+          if ! docker image inspect "${image}" >/dev/null 2>&1; then
+            image="${IMAGE}:${PRIMARY_TAG}"
+          fi
+          docker run --rm "${image}" --ready
+          docker image inspect "${image}" --format 'Uncompressed size: {{.Size}} bytes'
+
+      - name: Export the sample with LeanCLR
+        run: |
+          set -euo pipefail
+          rm -rf build/docker-linux build/docker-cache
+          mkdir -p build/docker-cache
+          docker run --rm \
+            -v "${PWD}":/src \
+            -v "${PWD}/build/docker-cache":/cache \
+            "${{ steps.image.outputs.name }}:${{ steps.revision.outputs.tag }}" \
+            --project /src/samples/dotnet \
+            --output /src/build/docker-linux
+          test -f build/docker-linux/leanclr-game.x86_64
+          cd build/docker-linux
+          timeout 180 ./leanclr-game.x86_64 --headless -- --m0-smoke 2>&1 | tee smoke.log
+          grep -q 'NODE2D_SMOKE_OK' smoke.log
+          grep -q 'LEANCLR_ATTACH ready' smoke.log
+
+      - name: Push image and aliases
+        if: ${{ inputs.push_to_ghcr && (steps.exists.outputs.exists != 'true' || inputs.force_rebuild) }}
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          REVISION_TAG: ${{ steps.revision.outputs.tag }}
+          PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
+        run: |
+          set -euo pipefail
+          docker push "${IMAGE}:${REVISION_TAG}"
+          docker push "${IMAGE}:${PRIMARY_TAG}"
+
+      - name: Refresh the primary alias for an existing image
+        if: ${{ inputs.push_to_ghcr && steps.exists.outputs.exists == 'true' && !inputs.force_rebuild }}
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          REVISION_TAG: ${{ steps.revision.outputs.tag }}
+          PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "${IMAGE}:${PRIMARY_TAG}" \
+            "${IMAGE}:${REVISION_TAG}"
+
+      - name: Verify the published manifest
+        if: ${{ inputs.push_to_ghcr }}
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
+        run: docker buildx imagetools inspect "${IMAGE}:${PRIMARY_TAG}"
+
+      - name: Upload publication logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-publication-logs
+          path: |
+            build/docker-cache/**/*.log
+            build/docker-cache/**/publication.json
+            build/docker-cache/**/manifest.json
+            build/docker-linux/smoke.log
+          if-no-files-found: warn
+
+      - name: Write job summary
+        if: always()
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          REVISION_TAG: ${{ steps.revision.outputs.tag }}
+          PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
+          PUSHED: ${{ inputs.push_to_ghcr }}
+          EXISTED: ${{ steps.exists.outputs.exists }}
+        run: |
+          {
+            echo "## godot-leanclr Linux image"
+            echo
+            echo "- Image: \`${IMAGE}:${PRIMARY_TAG}\`"
+            echo "- Content tag: \`${REVISION_TAG}\`"
+            echo "- Reused existing image: \`${EXISTED}\`"
+            echo "- Pushed to GHCR: \`${PUSHED}\`"
+            echo
+            echo '```'
+            df -h /
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
