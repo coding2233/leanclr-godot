@@ -77,8 +77,8 @@ def retarget_reference(reference: Path, destination: Path) -> Path:
     return project
 
 
-def build_references(csproj: Path, work: Path) -> list[Path]:
-    outputs = []
+def build_references(csproj: Path, work: Path) -> list[dict]:
+    entries = []
     local_nupkgs = "/opt/leanclr/exporter/GodotSharp/Tools/nupkgs"
     for index, item in enumerate(project_items(csproj, "ProjectReference")):
         reference = (csproj.parent / item["include"].replace("\\", "/")).resolve()
@@ -91,18 +91,20 @@ def build_references(csproj: Path, work: Path) -> list[Path]:
         try:
             # Retarget a copy so the project's own assets file is never forced
             # to a target framework it was not restored for.
-            copied = retarget_reference(reference, destination)
-            dotnet_build(copied, output=destination,
+            project = retarget_reference(reference, destination)
+            dotnet_build(project, output=destination,
                          log=work / f"reference-{reference.stem}.log",
                          properties={"RestoreAdditionalProjectSources": local_nupkgs})
         except RuntimeError:
             shutil.rmtree(destination)
             destination.mkdir(parents=True)
-            dotnet_build(reference, output=destination,
+            project = reference
+            dotnet_build(project, output=destination,
                          log=work / f"reference-{reference.stem}-original.log",
                          properties={"RestoreAdditionalProjectSources": local_nupkgs})
-        outputs.extend(sorted(destination.glob("*.dll")))
-    return outputs
+        for dll in sorted(destination.glob("*.dll")):
+            entries.append({"dll": dll, "project": project})
+    return entries
 
 
 def package_references(csproj: Path) -> list[str]:
@@ -160,15 +162,22 @@ def main() -> int:
     game.mkdir(parents=True)
     csproj, assembly = find_main_project(project)
     sources = collect_sources(project, game)
+    dep_entries = build_references(csproj, work)
     dep_dlls = [
-        dll for dll in build_references(csproj, work)
-        if dll.stem not in {"GodotSharp", "GodotSharpEditor"}
+        entry["dll"] for entry in dep_entries
+        if entry["dll"].stem not in {"GodotSharp", "GodotSharpEditor"}
     ]
+    dep_projects = [entry["project"] for entry in dep_entries]
+    print("PUBLICATION_REFERENCES",
+          [{"dll": str(entry["dll"]), "project": str(entry["project"])} for entry in dep_entries],
+          flush=True)
     packages = package_references(csproj)
 
     references = [f'<Reference Include="GodotSharp"><HintPath>{godotsharp.as_posix()}</HintPath></Reference>']
-    for dll in dep_dlls:
-        references.append(f'<Reference Include="{dll.stem}"><HintPath>{dll.as_posix()}</HintPath></Reference>')
+    project_references = [
+        f'<ProjectReference Include="{project_path.as_posix()}" />'
+        for project_path in dep_projects
+    ]
     (game / f"{assembly}.csproj").write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><AssemblyName>{assembly}</AssemblyName>
@@ -181,6 +190,7 @@ def main() -> int:
     <CompilerVisibleProperty Include="GodotProjectDir" />
     <AssemblyMetadata Include="M0Revision" Value="1" />
     {''.join(references)}
+    {''.join(project_references)}
     {''.join(packages)}
   </ItemGroup>
 </Project>''', encoding="utf-8")
