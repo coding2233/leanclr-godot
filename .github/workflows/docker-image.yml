@@ -18,6 +18,9 @@ on:
         description: Rebuild even when the content-hash image already exists
         type: boolean
         default: false
+  push:
+    branches:
+      - feature/docker
 
 permissions:
   contents: read
@@ -29,11 +32,16 @@ concurrency:
 
 jobs:
   image:
+    # workflow_dispatch is only indexed from the default branch. On a feature
+    # branch, push an empty commit whose message contains [image] to run it.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[image]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       PRIMARY_TAG: v4.7.2
       CACHE_TAG: buildcache-image
+      RELEASE_TAG: ${{ inputs.release_tag || 'v4.7.2' }}
+      PUSH_IMAGE: ${{ github.event_name == 'push' || inputs.push_to_ghcr }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
@@ -50,7 +58,7 @@ jobs:
       - name: Download the prebuilt bundle
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.release_tag }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           rm -rf download bundle
@@ -96,7 +104,7 @@ jobs:
       - name: Compute the content revision
         id: revision
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           digest="$(
@@ -177,7 +185,7 @@ jobs:
           grep -q 'LEANCLR_ATTACH ready' smoke.log
 
       - name: Push image and aliases
-        if: ${{ inputs.push_to_ghcr && (steps.exists.outputs.exists != 'true' || inputs.force_rebuild) }}
+        if: ${{ env.PUSH_IMAGE && (steps.exists.outputs.exists != 'true' || inputs.force_rebuild) }}
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           REVISION_TAG: ${{ steps.revision.outputs.tag }}
@@ -188,7 +196,7 @@ jobs:
           docker push "${IMAGE}:${PRIMARY_TAG}"
 
       - name: Refresh the primary alias for an existing image
-        if: ${{ inputs.push_to_ghcr && steps.exists.outputs.exists == 'true' && !inputs.force_rebuild }}
+        if: ${{ env.PUSH_IMAGE && steps.exists.outputs.exists == 'true' && !inputs.force_rebuild }}
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           REVISION_TAG: ${{ steps.revision.outputs.tag }}
@@ -200,7 +208,7 @@ jobs:
             "${IMAGE}:${REVISION_TAG}"
 
       - name: Verify the published manifest
-        if: ${{ inputs.push_to_ghcr }}
+        if: ${{ env.PUSH_IMAGE }}
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
@@ -224,9 +232,9 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}
           REVISION_TAG: ${{ steps.revision.outputs.tag }}
           PRIMARY_TAG: ${{ env.PRIMARY_TAG }}
-          PUSHED: ${{ inputs.push_to_ghcr }}
+          PUSHED: ${{ env.PUSH_IMAGE }}
           EXISTED: ${{ steps.exists.outputs.exists }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           {
             echo "## godot-leanclr image"
