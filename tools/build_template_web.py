@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import shutil
 from pathlib import Path
 
@@ -32,13 +33,14 @@ def main() -> int:
         "LEANCLR_GODOT_RUNTIME": str(runtime),
         "LEANCLR_GODOT_SOURCE": str(leanclr),
     }
-    run(["scons", "-C", godot, "platform=web", "target=template_release", "arch=wasm32",
-         "module_mono_enabled=yes", "modules_enabled_by_default=no",
-         "module_gdscript_enabled=yes", "module_freetype_enabled=yes",
-         "module_svg_enabled=yes", "module_text_server_fb_enabled=yes",
-         "module_godot_physics_2d_enabled=yes", "threads=no", "dlink_enabled=no",
-         "initial_memory=128", "debug_symbols=no", "optimize=none", "use_lto=no",
-         f"extra_suffix=leanclr_m3", f"-j{args.jobs}"],
+    scons = shlex.join(["scons", "-C", str(godot), "platform=web", "target=template_release", "arch=wasm32",
+                        "module_mono_enabled=yes", "modules_enabled_by_default=no",
+                        "module_gdscript_enabled=yes", "module_freetype_enabled=yes",
+                        "module_svg_enabled=yes", "module_text_server_fb_enabled=yes",
+                        "module_godot_physics_2d_enabled=yes", "threads=no", "dlink_enabled=no",
+                        "initial_memory=128", "debug_symbols=no", "optimize=none", "use_lto=no",
+                        "extra_suffix=leanclr_m3", f"-j{args.jobs}"])
+    run(["bash", "-lc", "source /opt/emsdk/emsdk_env.sh >/dev/null; exec " + scons],
         env=environment, log=ROOT / "build/m1/template-web-build.log")
 
     candidates = sorted((godot / "bin").glob("godot.web.template_release.*leanclr_m3*.zip"))

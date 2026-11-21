@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import shlex
 
 from linux_common import ROOT, run
 
@@ -17,10 +18,12 @@ def main() -> int:
 
     source = args.leanclr_source.resolve()
     build = args.build.resolve()
-    run(["emcmake", "cmake", "-S", ROOT / "native/m1", "-B", build, "-G", "Ninja",
-         "-DCMAKE_BUILD_TYPE=Release",
-         f"-DLEANCLR_SOURCE_DIR={source}"], log=ROOT / "build/m1/native-web-configure.log")
-    run(["cmake", "--build", build, "--parallel", str(args.jobs)],
+    emcmake = shlex.join(["emcmake", "cmake", "-S", str(ROOT / "native/m1"), "-B", str(build), "-G", "Ninja",
+                            "-DCMAKE_BUILD_TYPE=Release", f"-DLEANCLR_SOURCE_DIR={source}"])
+    run(["bash", "-lc", "source /opt/emsdk/emsdk_env.sh >/dev/null; exec " + emcmake],
+        log=ROOT / "build/m1/native-web-configure.log")
+    cmake_build = shlex.join(["cmake", "--build", str(build), "--parallel", str(args.jobs)])
+    run(["bash", "-lc", "source /opt/emsdk/emsdk_env.sh >/dev/null; exec " + cmake_build],
         log=ROOT / "build/m1/native-web-build.log")
     for path in (build / "libleanclr-godot-calli.a", build / "runtime/libleanclr.a"):
         if not path.is_file():
