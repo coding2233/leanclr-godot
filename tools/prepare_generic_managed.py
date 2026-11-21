@@ -111,6 +111,28 @@ namespace Godot.Bridge {
                 Type scriptType = _scriptTypeBiMap.GetScriptType(scriptPtr);
                 PublicationConstruction.Construct(scriptType, godotObject, _publishedFactories[scriptType]);
 ''' + bridge_text[body_end:]
+    bridge_text = bridge_text.replace(
+        "string scriptPathStr = Marshaling.ConvertStringToManaged(*scriptPath);",
+        'string scriptPathStr = Marshaling.ConvertStringToManaged(*scriptPath);\n            Console.WriteLine("LEANCLR_BRIDGE_LOOKUP " + scriptPathStr);')
+    bridge_text = bridge_text.replace(
+        "NativeFuncs.godotsharp_internal_new_csharp_script(outScript);\n                return;",
+        'Console.WriteLine("LEANCLR_BRIDGE_MISS " + scriptPathStr);\n                NativeFuncs.godotsharp_internal_new_csharp_script(outScript);\n                return;')
+    bridge_text = bridge_text.replace(
+        "GetOrCreateScriptBridgeForType(scriptType, outScript);",
+        'Console.WriteLine("LEANCLR_BRIDGE_FOUND " + scriptType.FullName);\n            GetOrCreateScriptBridgeForType(scriptType, outScript);')
+    bridge_text = bridge_text.replace(
+        "NativeFuncs.godotsharp_internal_new_csharp_script(outScript);\n                IntPtr scriptPtr = outScript->Reference;",
+        'Console.WriteLine("LEANCLR_BRIDGE_CREATE " + scriptType.FullName);\n                NativeFuncs.godotsharp_internal_new_csharp_script(outScript);\n                Console.WriteLine("LEANCLR_BRIDGE_CREATED " + outScript->Reference);\n                IntPtr scriptPtr = outScript->Reference;')
+    bridge_text = bridge_text.replace(
+        "NativeFuncs.godotsharp_internal_reload_registered_script(outScript->Reference);",
+        'Console.WriteLine("LEANCLR_BRIDGE_RELOAD " + scriptType.FullName);\n            NativeFuncs.godotsharp_internal_reload_registered_script(outScript->Reference);\n            Console.WriteLine("LEANCLR_BRIDGE_RELOADED");')
+    for lock_call in (
+        "ReadWriteLock.EnterUpgradeableReadLock();",
+        "ReadWriteLock.ExitUpgradeableReadLock();",
+        "ReadWriteLock.EnterWriteLock();",
+        "ReadWriteLock.ExitWriteLock();",
+    ):
+        bridge_text = bridge_text.replace("_scriptTypeBiMap." + lock_call, "")
     script_bridge.write_text(bridge_text, encoding="utf-8")
 
     disposables = stage / "Core/DisposablesTracker.cs"
