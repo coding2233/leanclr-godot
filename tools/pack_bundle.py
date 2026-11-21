@@ -65,7 +65,7 @@ def main() -> int:
     write_json(leanclr / "bundle.json", bundle)
     write_json(out / "manifest.json", bundle)
 
-    archive = out / f"leanclr-linux-bundle-{args.version}.tar.gz"
+    archive = out / f"leanclr-web-bundle-{args.version}.tar.gz"
     with tarfile.open(archive, "w:gz") as tar:
         add_tree(tar, leanclr, "leanclr")
 
@@ -73,7 +73,7 @@ def main() -> int:
     with tarfile.open(editor, "w:gz") as tar:
         add_tree(tar, leanclr / "exporter", "godot-leanclr-editor-linux-x86_64")
 
-    shutil.copyfile(leanclr / "templates/linux/linux_release.x86_64", out / "linux_release.x86_64")
+    shutil.copyfile(leanclr / "templates/web/web_nothreads_release.zip", out / "web_nothreads_release.zip")
     publication = out / f"leanclr-publication-{args.version}.zip"
     with zipfile.ZipFile(publication, "w", zipfile.ZIP_DEFLATED) as zf:
         for name in ("managed", "licenses"):

@@ -99,10 +99,16 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      - name: Build and smoke-test the runtime image
+      - name: Install Playwright Chromium
+        run: |
+          set -eux
+          python3 -m pip install --break-system-packages --disable-pip-version-check playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Build and smoke-test the Web export
         run: |
           set -euo pipefail
-          rm -rf bundle build/release-smoke build/release-cache
+          rm -rf bundle build/release-web build/release-cache
           mkdir -p bundle
           cp -a bundle-out/leanclr bundle/leanclr
           docker build -t godot-leanclr:release-test .
@@ -112,15 +118,21 @@ jobs:
             -v "${PWD}":/src \
             -v "${PWD}/build/release-cache":/cache \
             godot-leanclr:release-test \
+            --targets web \
             --project /src/samples/dotnet \
-            --output /src/build/release-smoke
-          test -f build/release-smoke/leanclr-game.x86_64
-          cd build/release-smoke
-          timeout 180 ./leanclr-game.x86_64 --headless -- --m0-smoke 2>&1 | sudo tee smoke.log
-          grep -q 'NODE2D_SMOKE_OK' smoke.log
-          grep -q 'LEANCLR_ATTACH ready' smoke.log
-          grep -q 'LEANCLR_BRIDGE_LOOKUP' smoke.log
+            --output /src/build/release-web
+          test -f build/release-web/index.html
+          python3 tools/smoke_web.py --directory build/release-web
 
+      - name: Upload Web smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leanclr-web-smoke
+          path: |
+            build/release-web/**
+            build/release-cache/**/*.log
+          if-no-files-found: warn
       - name: Delete the existing release and tag
         uses: actions/github-script@v7
         env:

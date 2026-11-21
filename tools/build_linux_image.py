@@ -1,4 +1,4 @@
-"""Build the LeanCLR Linux exporter, template and generic publication assets."""
+"""Build the LeanCLR Web exporter/template bundle and generic publication assets."""
 
 from __future__ import annotations
 
@@ -35,26 +35,26 @@ def prepare(args) -> None:
 def assemble(args) -> None:
     out = args.out.resolve()
     leanclr = ROOT / "extern/leanclr"
-    run(["python3", ROOT / "tools/build_native_linux.py", "--jobs", str(args.jobs)],
-        log=ROOT / "build/native.log")
-    run(["python3", ROOT / "tools/build_template_linux.py", "--jobs", str(args.jobs)],
-        log=ROOT / "build/template.log")
+    run(["python3", ROOT / "tools/build_native_web.py", "--jobs", str(args.jobs)],
+        log=ROOT / "build/native-web.log")
+    run(["python3", ROOT / "tools/build_template_web.py", "--jobs", str(args.jobs)],
+        log=ROOT / "build/template-web.log")
 
     if out.exists():
         shutil.rmtree(out)
-    (out / "templates/linux").mkdir(parents=True)
+    (out / "templates/web").mkdir(parents=True)
     (out / "exporter").mkdir(parents=True)
     (out / "managed/analyzers").mkdir(parents=True)
     (out / "licenses").mkdir(parents=True)
     (out / "bcl").mkdir(parents=True)
 
-    bcl_source = Path("/opt/dotnet/packs/win-x64/runtimes/win-x64/lib/net10.0")
+    bcl_source = Path("/opt/dotnet/packs/win-x86/runtimes/win-x86/lib/net10.0")
     if not (bcl_source / "System.Private.CoreLib.dll").is_file():
         raise FileNotFoundError(f"managed BCL is missing: {bcl_source}")
-    shutil.copytree(bcl_source, out / "bcl/win-x64")
+    shutil.copytree(bcl_source, out / "bcl/win-x86")
 
-    shutil.copyfile(ROOT / "build/m1/templates/linux/linux_release.x86_64",
-                    out / "templates/linux/linux_release.x86_64")
+    shutil.copyfile(ROOT / "build/m1/templates/web/web_nothreads_release.zip",
+                    out / "templates/web/web_nothreads_release.zip")
     exporter_source = ROOT / "build/m1/exporter"
     for entry in exporter_source.iterdir():
         destination = out / "exporter" / entry.name
@@ -84,37 +84,38 @@ def assemble(args) -> None:
             shutil.copyfile(source, out / "licenses" / name)
 
     profile = read_json(ROOT / "build/m1/profile.json")
-    profile["template_sha256"] = sha256(out / "templates/linux/linux_release.x86_64")
+    profile["template_sha256"] = sha256(out / "templates/web/web_nothreads_release.zip")
     exporter = next((path for path in (out / "exporter").iterdir()
                      if path.is_file() and "leanclr_m0" in path.name), None)
     if exporter is None:
         raise FileNotFoundError("private exporter is missing from the image artifacts")
     profile["exporter"] = "exporter/" + exporter.name
-    profile["template"] = "templates/linux/linux_release.x86_64"
+    profile["template"] = "templates/web/web_nothreads_release.zip"
+    profile["target"] = "web"
     profile["targets"] = {
-        "linux": {
-            "template": "templates/linux/linux_release.x86_64",
-            "bcl": "bcl/win-x64",
-            "phase": "M1-linux-demo",
-            "manifest_target": "linux",
-            "pointer_bits": 64,
+        "web": {
+            "template": "templates/web/web_nothreads_release.zip",
+            "bcl": "bcl/win-x86",
+            "phase": "M3-html5-demo",
+            "manifest_target": "wasm",
+            "pointer_bits": 32,
             "real_bits": 32,
         },
     }
     write_json(out / "profile.json", profile)
-    print("LEANCLR_LINUX_IMAGE_OK", out)
+    print("LEANCLR_WEB_IMAGE_OK", out)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("/opt/leanclr"))
     parser.add_argument("--jobs", type=int, default=4)
-    parser.add_argument("--step", choices=["prepare", "linux", "all"], default="all")
+    parser.add_argument("--step", choices=["prepare", "web", "all"], default="all")
     args = parser.parse_args()
 
     if args.step in {"prepare", "all"}:
         prepare(args)
-    if args.step in {"linux", "all"}:
+    if args.step in {"web", "all"}:
         assemble(args)
     return 0
 

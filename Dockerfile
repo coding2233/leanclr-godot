@@ -6,7 +6,7 @@
 # Release) and extracted to ./bundle/leanclr before this image is built:
 #
 #   mkdir -p bundle
-#   tar -xzf leanclr-linux-bundle-v4.7.2.tar.gz -C bundle
+#   tar -xzf leanclr-web-bundle-v4.7.2.tar.gz -C bundle
 #   docker build -t godot-leanclr:v4.7.2 .
 #   docker run --rm -v "$PWD":/src -v leanclr-cache:/cache godot-leanclr:v4.7.2
 
@@ -82,13 +82,13 @@ COPY bundle/leanclr /opt/leanclr
 RUN set -eux; \
  bash -n /opt/leanclr/publish; \
  test -x /opt/leanclr/publish; \
- test -f /opt/leanclr/templates/linux/linux_release.x86_64; \
+ test -f /opt/leanclr/templates/web/web_nothreads_release.zip; \
  test -n "$(find /opt/leanclr/exporter -maxdepth 1 -type f -name '*leanclr_m0*' -print -quit)"; \
  test -f /opt/leanclr/managed/GodotSharp.dll; \
  test -f /opt/leanclr/managed/analyzers/Godot.SourceGenerators.dll; \
  test -f /opt/leanclr/managed/ManagedInfo.dll; \
  test -f /opt/leanclr/managed/Bootstrap.cs; \
- test -f /opt/leanclr/bcl/win-x64/System.Private.CoreLib.dll; \
+ test -f /opt/leanclr/bcl/win-x86/System.Private.CoreLib.dll; \
  /opt/leanclr/publish --ready
 
 WORKDIR /src

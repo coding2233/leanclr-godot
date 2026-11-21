@@ -72,7 +72,7 @@ jobs:
           sha256sum -c SHA256SUMS
           cd ..
           mkdir -p bundle
-          tar -xzf download/leanclr-linux-bundle-*.tar.gz -C bundle
+          tar -xzf download/leanclr-web-bundle-*.tar.gz -C bundle
           test -f bundle/leanclr/publish
 
       - name: Verify the bundle bridge patch
@@ -186,22 +186,26 @@ jobs:
           docker run --rm "${image}" --ready
           docker image inspect "${image}" --format 'Uncompressed size: {{.Size}} bytes'
 
-      - name: Export the sample with LeanCLR
+      - name: Install Playwright Chromium
+        run: |
+          set -eux
+          python3 -m pip install --break-system-packages --disable-pip-version-check playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Export the sample to Web and smoke-test it
         run: |
           set -euo pipefail
-          rm -rf build/docker-linux build/docker-cache
+          rm -rf build/docker-web build/docker-cache
           mkdir -p build/docker-cache
           docker run --rm \
             -v "${PWD}":/src \
             -v "${PWD}/build/docker-cache":/cache \
             "${{ steps.image.outputs.name }}:${{ steps.revision.outputs.tag }}" \
+            --targets web \
             --project /src/samples/dotnet \
-            --output /src/build/docker-linux
-          test -f build/docker-linux/leanclr-game.x86_64
-          cd build/docker-linux
-          timeout 180 ./leanclr-game.x86_64 --headless -- --m0-smoke 2>&1 | sudo tee smoke.log
-          grep -q 'NODE2D_SMOKE_OK' smoke.log
-          grep -q 'LEANCLR_ATTACH ready' smoke.log
+            --output /src/build/docker-web
+          test -f build/docker-web/index.html
+          python3 tools/smoke_web.py --directory build/docker-web
 
       - name: Push image and aliases
         if: ${{ inputs.push_to_ghcr && (steps.exists.outputs.exists != 'true' || inputs.force_rebuild) }}
@@ -242,7 +246,7 @@ jobs:
             build/docker-cache/**/*.log
             build/docker-cache/**/publication.json
             build/docker-cache/**/manifest.json
-            build/docker-linux/smoke.log
+            build/docker-web/**
           if-no-files-found: warn
 
       - name: Write job summary

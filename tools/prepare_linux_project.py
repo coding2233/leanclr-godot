@@ -146,6 +146,7 @@ def main() -> int:
     parser.add_argument("--bcl", type=Path, required=True)
     parser.add_argument("--licenses", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--target", choices=["web", "linux"], default="web")
     args = parser.parse_args()
 
     project = args.project.resolve()
@@ -161,8 +162,10 @@ def main() -> int:
     source_generator = generic / "analyzers/Godot.SourceGenerators.dll"
     if not godotsharp.is_file() or not source_generator.is_file():
         raise FileNotFoundError("generic publication assemblies are missing")
-    if profile.get("target") != "linux":
-        raise RuntimeError(f"template profile targets {profile.get('target')}, not linux")
+    target = args.target
+    target_info = profile.get("targets", {}).get(target)
+    if target_info is None:
+        raise RuntimeError(f"template profile does not provide target {target}")
     if sha256(godotsharp) != profile.get("godotsharp_sha256"):
         raise RuntimeError("GodotSharp does not match the baked template profile")
 
@@ -246,7 +249,8 @@ def main() -> int:
     corelib = next((item for item in closure if item["name"] == "System.Private.CoreLib"), None)
     if corelib is None:
         raise RuntimeError("CoreLib was not resolved")
-    if corelib["sha256"] != dependencies["corelib"]["native_sha256"]:
+    corelib_hash = dependencies["corelib"]["wasm_sha256" if target == "web" else "native_sha256"]
+    if corelib["sha256"] != corelib_hash:
         raise RuntimeError(f"unexpected CoreLib {corelib['sha256']}")
 
     if out.exists():
@@ -273,14 +277,14 @@ def main() -> int:
         files.append({"path": "res://.leanclr/" + target, "source": target, "sha256": sha256(path)})
 
     manifest = {
-        "phase": "M1-linux-demo",
+        "phase": target_info["phase"],
         "runtime_ready": True,
-        "target": "linux",
+        "target": target_info["manifest_target"],
         "godot_commit": dependencies["godot"]["commit"],
         "leanclr_commit": dependencies["leanclr"]["commit"],
-        "profile": "linux-x64-leanclr",
-        "pointer_bits": 64,
-        "real_bits": 32,
+        "profile": f"{target}-leanclr",
+        "pointer_bits": target_info["pointer_bits"],
+        "real_bits": target_info["real_bits"],
         "calli_sha256": profile["calli_sha256"],
         "files": files,
     }
@@ -289,6 +293,7 @@ def main() -> int:
         "project": str(project),
         "assembly": assembly,
         "sources": sources,
+        "target": target,
         "references": [str(path) for path in dep_dlls],
         "assemblies": closure,
         "payload": str(out),

@@ -24,7 +24,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NUGET_PACKAGES=/cache/nuget \
     HOME=/root \
     GODOT_VERSION=${GODOT_VERSION} \
-    PATH=/opt/leanclr:/usr/lib/dotnet:/opt/godot:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    EMSDK=/opt/emsdk \
+    PATH=/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/leanclr:/usr/lib/dotnet:/opt/godot:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # A single failed index download makes apt exit 100, so retry the whole
 # update+install pair instead of failing the layer on the first attempt.
@@ -101,6 +102,27 @@ RUN set -eux; \
  rm /tmp/win-x64.nupkg; \
  test -f /opt/dotnet/packs/win-x64/runtimes/win-x64/lib/net10.0/System.Private.CoreLib.dll
 
+# The Web publication BCL is the 32-bit managed runtime pack.
+RUN set -eux; \
+ mkdir -p /opt/dotnet/packs/win-x86; \
+ curl -4 -fsSL --retry 10 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+  -o /tmp/win-x86.nupkg \
+  https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.win-x86/10.0.8/microsoft.netcore.app.runtime.win-x86.10.0.8.nupkg; \
+ unzip -q /tmp/win-x86.nupkg -d /opt/dotnet/packs/win-x86; \
+ rm /tmp/win-x86.nupkg; \
+ test -f /opt/dotnet/packs/win-x86/runtimes/win-x86/lib/net10.0/System.Private.CoreLib.dll
+
+# Emscripten 4.0.20 for the Web export template.
+RUN set -eux; \
+ curl -4 -fsSL --retry 10 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+  -o /tmp/emsdk.tar.gz \
+  https://codeload.github.com/emscripten-core/emsdk/tar.gz/e4fe26ef59168ff44f4c23c466e497bf60b3411e; \
+ mkdir -p /opt/emsdk; \
+ tar -xzf /tmp/emsdk.tar.gz -C /opt/emsdk --strip-components=1; \
+ rm /tmp/emsdk.tar.gz; \
+ /opt/emsdk/emsdk install releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit; \
+ /opt/emsdk/emsdk activate releases-c387d7a7e9537d0041d2c3ae71b7538cc978104e-64bit
+
 # The official .NET editor is used headless to import projects and generate C#
 # glue. It is never the shipped runtime.
 RUN set -eux; \
@@ -137,7 +159,7 @@ RUN python3 /build/repo/tools/build_linux_image.py --step prepare
 COPY native /build/repo/native
 
 # LeanCLR native runtime, Linux template and artifact assembly.
-RUN python3 /build/repo/tools/build_linux_image.py --step linux --out /opt/leanclr
+RUN python3 /build/repo/tools/build_linux_image.py --step web --out /opt/leanclr
 
 # ---------------------------------------------------------------------------
 # Final image
@@ -161,12 +183,12 @@ COPY managed/m1/Bootstrap.cs /opt/leanclr/managed/Bootstrap.cs
 
 RUN set -eux; \
  bash -n /opt/leanclr/publish; \
- test -f /opt/leanclr/templates/linux/linux_release.x86_64; \
+ test -f /opt/leanclr/templates/web/web_nothreads_release.zip; \
  test -n "$(find /opt/leanclr/exporter -maxdepth 1 -type f -name '*leanclr_m0*' -print -quit)"; \
  test -f /opt/leanclr/managed/GodotSharp.dll; \
  test -f /opt/leanclr/managed/analyzers/Godot.SourceGenerators.dll; \
  test -f /opt/leanclr/managed/ManagedInfo.dll; \
- test -f /opt/dotnet/packs/win-x64/runtimes/win-x64/lib/net10.0/System.Private.CoreLib.dll; \
+ test -f /opt/dotnet/packs/win-x86/runtimes/win-x86/lib/net10.0/System.Private.CoreLib.dll; \
  /opt/leanclr/publish --ready
 
 WORKDIR /src
