@@ -44,6 +44,8 @@ namespace LeanClr
         {
             try
             {
+                Console.WriteLine("LEANCLR_GODOTSHARP_MVID " +
+                    typeof(ScriptManagerBridge).Assembly.ManifestModule.ModuleVersionId);
                 const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
                 object map = typeof(ScriptManagerBridge).GetField("_pathTypeBiMap", Flags)?.GetValue(null);
                 object pathsValue = map?.GetType().GetProperty("Paths")?.GetValue(map);
