@@ -187,17 +187,14 @@ def main() -> int:
         entry["dll"] for entry in dep_entries
         if entry["dll"].stem not in {"GodotSharp", "GodotSharpEditor"}
     ]
-    dep_projects = [entry["project"] for entry in dep_entries]
     print("PUBLICATION_REFERENCES",
           [{"dll": str(entry["dll"]), "project": str(entry["project"])} for entry in dep_entries],
           flush=True)
     packages = package_references(csproj)
 
     references = [f'<Reference Include="GodotSharp"><HintPath>{godotsharp.as_posix()}</HintPath></Reference>']
-    project_references = [
-        f'<ProjectReference Include="{project_path.as_posix()}" />'
-        for project_path in dep_projects
-    ]
+    for dll in dep_dlls:
+        references.append(f'<Reference Include="{dll.stem}"><HintPath>{dll.as_posix()}</HintPath></Reference>')
     (game / f"{assembly}.csproj").write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><AssemblyName>{assembly}</AssemblyName>
@@ -210,7 +207,6 @@ def main() -> int:
     <CompilerVisibleProperty Include="GodotProjectDir" />
     <AssemblyMetadata Include="M0Revision" Value="1" />
     {''.join(references)}
-    {''.join(project_references)}
     {''.join(packages)}
   </ItemGroup>
   <ItemGroup><FrameworkReference Update="Microsoft.NETCore.App" TargetingPackVersion="10.0.8" /></ItemGroup>
