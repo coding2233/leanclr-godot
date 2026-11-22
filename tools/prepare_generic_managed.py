@@ -170,6 +170,7 @@ namespace Godot.Bridge {
     <Compile Include="Properties/**/*.cs" /><Compile Include="GlobalUsings.cs" /><Compile Include="Compat.cs" />
     <Analyzer Include="{internal_analyzer.as_posix()}" />
   </ItemGroup>
+  <ItemGroup><FrameworkReference Update="Microsoft.NETCore.App" TargetingPackVersion="10.0.8" /></ItemGroup>
 </Project>''', encoding="utf-8")
     dotnet_build(stage / "GodotSharp.csproj", log=out / "managed-godotsharp.log")
     godotsharp = stage / "bin/Release/net10.0/GodotSharp.dll"
@@ -201,6 +202,7 @@ public static unsafe class AdditionalSignatures {
  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>GodotSharpEditor</AssemblyName><AllowUnsafeBlocks>true</AllowUnsafeBlocks><NoWarn>0436;0169</NoWarn></PropertyGroup>
  <ItemGroup><Reference Include="GodotSharp"><HintPath>{godotsharp.as_posix()}</HintPath></Reference>
  <Analyzer Include="{internal_analyzer.as_posix()}" /></ItemGroup>
+ <ItemGroup><FrameworkReference Update="Microsoft.NETCore.App" TargetingPackVersion="10.0.8" /></ItemGroup>
 </Project>''', encoding="utf-8")
     dotnet_build(fixture / "Signatures.csproj", log=out / "signature-fixture.log")
 

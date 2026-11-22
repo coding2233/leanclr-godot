@@ -73,6 +73,9 @@ def retarget_reference(reference: Path, destination: Path) -> Path:
     if "<TargetFramework>" not in text:
         text = text.replace("<PropertyGroup>",
                             "<PropertyGroup><TargetFramework>net10.0</TargetFramework>", 1)
+    text = text.replace(
+        "</Project>",
+        '<ItemGroup><FrameworkReference Update="Microsoft.NETCore.App" TargetingPackVersion="10.0.8" /></ItemGroup>\n</Project>')
     project.write_text(text, encoding="utf-8")
     return project
 
@@ -210,6 +213,7 @@ def main() -> int:
     {''.join(project_references)}
     {''.join(packages)}
   </ItemGroup>
+  <ItemGroup><FrameworkReference Update="Microsoft.NETCore.App" TargetingPackVersion="10.0.8" /></ItemGroup>
 </Project>''', encoding="utf-8")
     dotnet_build(game / f"{assembly}.csproj", log=work / "game-build.log",
                  properties=restore_property)
@@ -237,6 +241,7 @@ def main() -> int:
   <ItemGroup>
     {''.join(bootstrap_references)}
   </ItemGroup>
+  <ItemGroup><FrameworkReference Update="Microsoft.NETCore.App" TargetingPackVersion="10.0.8" /></ItemGroup>
 </Project>''', encoding="utf-8")
     dotnet_build(bootstrap / "Bootstrap.csproj", log=work / "bootstrap-build.log",
                  properties=restore_property)
