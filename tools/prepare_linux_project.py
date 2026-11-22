@@ -91,21 +91,22 @@ def build_references(csproj: Path, work: Path) -> list[dict]:
         if destination.exists():
             shutil.rmtree(destination)
         destination.mkdir(parents=True)
+        output = destination / "out"
         try:
             # Retarget a copy so the project's own assets file is never forced
             # to a target framework it was not restored for.
             project = retarget_reference(reference, destination)
-            dotnet_build(project, output=destination,
+            dotnet_build(project, output=output,
                          log=work / f"reference-{reference.stem}.log",
                          properties={"RestoreAdditionalProjectSources": local_nupkgs})
         except RuntimeError:
             shutil.rmtree(destination)
             destination.mkdir(parents=True)
             project = reference
-            dotnet_build(project, output=destination,
+            dotnet_build(project, output=output,
                          log=work / f"reference-{reference.stem}-original.log",
                          properties={"RestoreAdditionalProjectSources": local_nupkgs})
-        for dll in sorted(destination.glob("*.dll")):
+        for dll in sorted(output.glob("*.dll")):
             entries.append({"dll": dll, "project": project})
     return entries
 

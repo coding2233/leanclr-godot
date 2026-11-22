@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from functools import partial
 import http.server
+import os
 from pathlib import Path
 import sys
 import threading
@@ -19,6 +20,7 @@ def main() -> int:
     parser.add_argument("--query", default="?smoke")
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--expected", default="NODE2D_SMOKE_OK instances=1 frames=4 x=8 speed=120")
+    parser.add_argument("--executable", default=os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE"))
     args = parser.parse_args()
 
     directory = args.directory.resolve()
@@ -37,9 +39,14 @@ def main() -> int:
     errors: list[str] = []
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=True,
-                args=["--enable-unsafe-swiftshader", "--disable-background-networking"])
+            launch_options = {
+                "headless": True,
+                "args": ["--no-sandbox", "--enable-unsafe-swiftshader",
+                         "--disable-background-networking"],
+            }
+            if args.executable:
+                launch_options["executable_path"] = args.executable
+            browser = playwright.chromium.launch(**launch_options)
             page = browser.new_page(viewport={"width": 960, "height": 640})
             page.on("console", lambda message: (
                 messages.append(message.text),
